@@ -6,7 +6,7 @@ use common::bitvec::{BitSlice, BitSliceExt, BitVec};
 use common::counter::hardware_counter::HardwareCounterCell;
 use common::fs::clear_disk_cache;
 use common::mmap::{self, Advice, AdviceSetting, MmapSlice, create_and_ensure_length};
-use common::persisted_hashmap::{MmapHashMap, READ_ENTRY_OVERHEAD, serialize_hashmap};
+use common::persisted_hashmap::{READ_ENTRY_OVERHEAD, UniversalHashMap, serialize_hashmap};
 use common::stored_bitslice::MmapBitSlice;
 use common::types::PointOffsetType;
 use common::universal_io::{MmapFile, OpenOptions};
@@ -62,7 +62,8 @@ pub struct MmapInvertedIndex {
 
 pub(in crate::index::field_index::full_text_index) struct Storage {
     pub(in crate::index::field_index::full_text_index) postings: MmapPostingsEnum,
-    pub(in crate::index::field_index::full_text_index) vocab: MmapHashMap<str, TokenId>,
+    pub(in crate::index::field_index::full_text_index) vocab:
+        UniversalHashMap<str, TokenId, MmapFile>,
     pub(in crate::index::field_index::full_text_index) point_to_tokens_count: MmapSlice<usize>,
     pub(in crate::index::field_index::full_text_index) deleted_points: BitVec,
 }
@@ -176,7 +177,13 @@ impl MmapInvertedIndex {
                 )?)
             }
         };
-        let vocab = MmapHashMap::<str, TokenId>::open(&vocab_path, false)?;
+        let vocab = UniversalHashMap::<str, TokenId, MmapFile>::open(
+            &vocab_path,
+            OpenOptions {
+                populate: Some(populate),
+                ..OpenOptions::default()
+            },
+        )?;
 
         let point_to_tokens_count = unsafe {
             MmapSlice::try_from(mmap::open_write_mmap(
@@ -220,7 +227,7 @@ impl MmapInvertedIndex {
         &self,
         mut f: impl FnMut(&str, TokenId) -> OperationResult<()>,
     ) -> OperationResult<()> {
-        self.storage.vocab.iter().try_for_each(|(k, v)| {
+        self.storage.vocab.for_each_entry(|k, v| {
             // unwrap safety: we know that each token points to a token id.
             f(k, *v.first().unwrap())
         })
@@ -482,7 +489,7 @@ impl MmapInvertedIndex {
             deleted_points: _,
         } = storage;
         postings.clear_cache()?;
-        vocab.clear_cache()?;
+        vocab.clear_ram_cache()?;
         point_to_tokens_count.clear_cache()?;
         clear_disk_cache(&path.join(DELETED_POINTS_FILE))?;
         Ok(())
@@ -617,25 +624,22 @@ impl InvertedIndex for MmapInvertedIndex {
 
     fn for_each_token_id<'a, Meta>(
         &self,
-        mut tokens: impl Iterator<Item = (Meta, &'a str)>,
+        tokens: impl Iterator<Item = (Meta, &'a str)>,
         hw_counter: &HardwareCounterCell,
         mut f: impl FnMut(Meta, Option<TokenId>),
     ) -> OperationResult<()> {
-        tokens.try_for_each(|(meta, token)| {
-            if self.is_on_disk {
-                hw_counter.payload_index_io_read_counter().incr_delta(
-                    READ_ENTRY_OVERHEAD + size_of::<TokenId>(), // Avoid check overhead and assume token is always read
-                );
-            }
-
-            let token_id = self
-                .storage
-                .vocab
-                .get(token.as_ref())?
-                .and_then(<[TokenId]>::first)
-                .copied();
-            f(meta, token_id);
-            Ok(())
-        })
+        if self.is_on_disk {
+            // TODO: multiply by amount of queries
+            hw_counter.payload_index_io_read_counter().incr_delta(
+                READ_ENTRY_OVERHEAD + size_of::<TokenId>(), // Avoid check overhead and assume token is always read
+            );
+        }
+        self.storage
+            .vocab
+            .batch_with_entry(tokens, |meta, token_ids| match token_ids {
+                Some([token_id]) => Ok(f(meta, Some(*token_id))),
+                Some(_) => unreachable!(),
+                None => Ok(f(meta, None)),
+            })
     }
 }
