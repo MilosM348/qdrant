@@ -281,7 +281,7 @@ impl<S: StoredGeoMapIndexStorage> StoredGeoMapIndex<S> {
             writeable: false,
             need_sequential: false,
             disk_parallel: None,
-            populate: populate.into(),
+            populate: Populate::from(populate),
             advice: None,
             prevent_caching: None,
         };

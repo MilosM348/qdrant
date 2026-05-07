@@ -160,7 +160,7 @@ impl MmapInvertedIndex {
             writeable: false,
             need_sequential: false,
             disk_parallel: None,
-            populate: populate.into(),
+            populate: Populate::from(populate),
             advice: Some(AdviceSetting::Advice(Advice::Normal)),
             prevent_caching: None,
         };
