@@ -174,7 +174,7 @@ impl<T: Encodable + Numericable + Default + StoredValue + bytemuck::Pod> MmapNum
             writeable: false,
             need_sequential: false,
             disk_parallel: None,
-            populate: Some(do_populate),
+            populate: do_populate.into(),
             advice: None,
             prevent_caching: None,
         };

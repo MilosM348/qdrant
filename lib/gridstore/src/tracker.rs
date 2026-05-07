@@ -6,7 +6,7 @@ use common::mmap::{Advice, AdviceSetting, create_and_ensure_length};
 #[expect(deprecated, reason = "legacy code")]
 use common::mmap::{transmute_from_u8, transmute_to_u8};
 use common::universal_io::{
-    OpenOptions, ReadRange, UniversalIoError, UniversalRead, UniversalWrite,
+    OpenOptions, Populate, ReadRange, UniversalIoError, UniversalRead, UniversalWrite,
 };
 use smallvec::SmallVec;
 use zerocopy::FromZeros;
@@ -24,7 +24,7 @@ fn tracker_open_options() -> OpenOptions {
         writeable: true,
         need_sequential: false,
         disk_parallel: None,
-        populate: Some(false),
+        populate: Populate::No,
         advice: Some(AdviceSetting::Advice(Advice::Random)),
         prevent_caching: None,
     }
