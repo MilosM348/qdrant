@@ -9,7 +9,7 @@ use common::mmap::{self, Advice, AdviceSetting, MmapSlice, create_and_ensure_len
 use common::persisted_hashmap::{MmapHashMap, READ_ENTRY_OVERHEAD, serialize_hashmap};
 use common::stored_bitslice::MmapBitSlice;
 use common::types::PointOffsetType;
-use common::universal_io::{MmapFile, OpenOptions};
+use common::universal_io::{MmapFile, OpenOptions, Populate};
 use types::ZerocopyPostingValue;
 use uio_postings::UniversalPostings;
 
